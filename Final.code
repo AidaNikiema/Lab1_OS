@@ -1,0 +1,803 @@
+/*
+ * 8INF342 - Systèmes d'exploitation
+ * Laboratoire #1 - Partie V
+ *
+ * Mini-terminal en C++
+ *
+ * Commandes internes :
+ *
+ * historique  -> affiche les 5 dernières commandes
+ * stop        -> ferme le terminal
+ * auto1       -> lance automatiquement 100 commandes
+ * auto2       -> lance automatiquement 500 commandes
+ */
+
+
+#include <iostream>
+#include <vector>
+#include <string>
+
+#include <unistd.h>      // fork(), execvp()
+#include <string.h>      // strtok(), strcmp(), strncpy()
+#include <sys/wait.h>    // waitpid()
+
+#include <fstream>       // ofstream
+#include <chrono>        // mesure du temps
+
+using namespace std;
+
+
+// ==========================================================
+// STRUCTURE POUR L'HISTORIQUE
+// ==========================================================
+
+// Une entrée de l'historique contient :
+//
+// 1. la commande exécutée
+// 2. le PID du processus enfant
+//
+// Exemple :
+//
+// commande = "ls -l"
+// pid = 1234
+//
+struct EntreeHistorique
+{
+    string commande;
+    pid_t pid;
+};
+
+
+// ==========================================================
+// AFFICHER LES 5 DERNIÈRES COMMANDES
+// ==========================================================
+
+void afficherHistorique(
+        const vector<EntreeHistorique>& historique,
+        string nomCopie)
+{
+    // Création du fichier historique.txt.
+    //
+    // Le contenu précédent est remplacé.
+    ofstream fichier("historique.txt");
+
+
+    // Vérifie si le fichier a bien été ouvert.
+    if(!fichier)
+    {
+        cerr << "Erreur : impossible d'ouvrir historique.txt"
+             << endl;
+
+        return;
+    }
+
+
+    // Ce deuxième fichier est utilisé seulement
+    // pendant le mode automatique.
+    //
+    // Exemple :
+    // historique1_50.txt
+    //
+    ofstream copie;
+
+
+    // Si nomCopie n'est pas vide,
+    // on crée aussi ce fichier.
+    if(nomCopie != "")
+    {
+        copie.open(nomCopie);
+    }
+
+
+    // ------------------------------------------------------
+    // DÉTERMINER LE NOMBRE DE COMMANDES À AFFICHER
+    // ------------------------------------------------------
+
+    int nombre;
+
+
+    // Si on a moins de 5 commandes,
+    // on les affiche toutes.
+    if(historique.size() < 5)
+    {
+        nombre = historique.size();
+    }
+
+    // Sinon, on affiche seulement les 5 dernières.
+    else
+    {
+        nombre = 5;
+    }
+
+
+    // Position de la première commande
+    // que nous allons afficher.
+    int debut = historique.size() - nombre;
+
+
+    // ------------------------------------------------------
+    // AFFICHAGE DES COMMANDES
+    // ------------------------------------------------------
+
+    for(int i = 0; i < nombre; i++)
+    {
+        // Position de la commande dans le vector.
+        int position = debut + i;
+
+
+        // Numérotation :
+        //
+        // 5 = la plus ancienne des cinq
+        // 1 = la plus récente
+        //
+        int numero = nombre - i;
+
+
+        // Affichage dans le terminal.
+        cout << numero << "\t"
+             << historique[position].commande << "\t"
+             << historique[position].pid
+             << endl;
+
+
+        // Écriture dans historique.txt.
+        fichier << numero << "\t"
+                << historique[position].commande << "\t"
+                << historique[position].pid
+                << endl;
+
+
+        // Si un deuxième fichier existe,
+        // on écrit aussi dedans.
+        if(copie)
+        {
+            copie << numero << "\t"
+                  << historique[position].commande << "\t"
+                  << historique[position].pid
+                  << endl;
+        }
+    }
+}
+
+
+// ==========================================================
+// EXÉCUTER UNE COMMANDE
+// ==========================================================
+
+// Cette fonction reçoit une commande.
+//
+// Exemple :
+//
+// "ls -l"
+//
+// Elle va :
+//
+// 1. séparer la commande et les arguments
+// 2. vérifier s'il y a un &
+// 3. créer un enfant avec fork()
+// 4. exécuter la commande avec execvp()
+// 5. faire attendre le parent si nécessaire
+// 6. sauvegarder la commande et le PID
+//
+void executerCommande(
+        string commandeOriginale,
+        vector<EntreeHistorique>& historique)
+{
+    // ------------------------------------------------------
+    // TRANSFORMER string EN char[]
+    // ------------------------------------------------------
+
+    // strtok() utilise un tableau de char.
+    //
+    // On crée donc command pour y copier
+    // la string commandeOriginale.
+    //
+    char command[128];
+
+
+    // Copie au maximum 127 caractères.
+    strncpy(
+        command,
+        commandeOriginale.c_str(),
+        127
+    );
+
+
+    // Assure que la chaîne se termine par '\0'.
+    command[127] = '\0';
+
+
+    // ------------------------------------------------------
+    // SÉPARER LES ARGUMENTS
+    // ------------------------------------------------------
+
+    vector<char*> args;
+
+
+    // strtok() trouve le premier mot.
+    //
+    // Exemple :
+    //
+    // "ls -l"
+    //
+    // prog = "ls"
+    //
+    char* prog = strtok(command, " ");
+
+
+    // tmp va permettre de parcourir
+    // tous les mots de la commande.
+    char* tmp = prog;
+
+
+    // Continue tant qu'il reste un mot.
+    while(tmp != NULL)
+    {
+        // Ajoute le mot dans args.
+        args.push_back(tmp);
+
+
+        // Cherche le prochain mot.
+        tmp = strtok(NULL, " ");
+    }
+
+
+    // Si aucun argument n'existe,
+    // on quitte simplement la fonction.
+    if(args.empty())
+    {
+        return;
+    }
+
+
+    // ------------------------------------------------------
+    // GESTION DU &
+    // ------------------------------------------------------
+
+    // Par défaut, la commande est exécutée
+    // en avant-plan.
+    bool background = false;
+
+
+    // Vérifie si le dernier argument est "&".
+    if(strcmp(args.back(), "&") == 0)
+    {
+        // La commande doit être exécutée
+        // en arrière-plan.
+        background = true;
+
+
+        // On enlève le "&" pour ne pas
+        // l'envoyer à execvp().
+        args.pop_back();
+    }
+
+
+    // Si l'utilisateur avait seulement entré "&",
+    // il ne reste aucune vraie commande.
+    if(args.empty())
+    {
+        return;
+    }
+
+
+    // ------------------------------------------------------
+    // CONSTRUCTION DE argv
+    // ------------------------------------------------------
+
+    // execvp() demande un tableau de char*
+    // terminé par NULL.
+    //
+    char** argv = new char*[args.size() + 1];
+
+
+    // Copie les arguments dans argv.
+    for(int i = 0; i < args.size(); i++)
+    {
+        argv[i] = args[i];
+    }
+
+
+    // Dernier élément obligatoire pour execvp().
+    argv[args.size()] = NULL;
+
+
+    // ------------------------------------------------------
+    // CRÉATION DU PROCESSUS ENFANT
+    // ------------------------------------------------------
+
+    pid_t kidpid = fork();
+
+
+    // ------------------------------------------------------
+    // ERREUR FORK
+    // ------------------------------------------------------
+
+    if(kidpid < 0)
+    {
+        perror("Erreur fork");
+
+        delete[] argv;
+
+        return;
+    }
+
+
+    // ------------------------------------------------------
+    // PROCESSUS ENFANT
+    // ------------------------------------------------------
+
+    else if(kidpid == 0)
+    {
+        // Le processus enfant est remplacé
+        // par la commande demandée.
+        //
+        execvp(prog, argv);
+
+
+        // Si execvp fonctionne,
+        // cette partie n'est jamais exécutée.
+        //
+        // Donc, si on arrive ici,
+        // execvp a échoué.
+        perror("Erreur execvp");
+
+
+        // Termine le processus enfant.
+        exit(1);
+    }
+
+
+    // ------------------------------------------------------
+    // PROCESSUS PARENT
+    // ------------------------------------------------------
+
+    else
+    {
+        // ----------------------------------------------
+        // AJOUTER LA COMMANDE À L'HISTORIQUE
+        // ----------------------------------------------
+
+        EntreeHistorique entree;
+
+
+        // Sauvegarde la commande complète.
+        //
+        // Exemple :
+        // "ls -l"
+        //
+        entree.commande = commandeOriginale;
+
+
+        // Sauvegarde le PID de l'enfant.
+        entree.pid = kidpid;
+
+
+        // Ajoute l'entrée au vector historique.
+        historique.push_back(entree);
+
+
+        // ----------------------------------------------
+        // AVANT-PLAN / ARRIÈRE-PLAN
+        // ----------------------------------------------
+
+        // Si background == false :
+        //
+        // !background == true
+        //
+        // donc le parent attend l'enfant.
+        //
+        if(!background)
+        {
+            if(waitpid(kidpid, 0, 0) < 0)
+            {
+                perror("Erreur waitpid");
+            }
+        }
+
+
+        // Si background == true :
+        //
+        // le parent ne fait pas waitpid()
+        // et continue directement.
+    }
+
+
+    // Libère la mémoire utilisée par argv.
+    delete[] argv;
+}
+
+
+// ==========================================================
+// SAUVEGARDER TOUTES LES COMMANDES D'UNE INSTANCE
+// ==========================================================
+
+// Ici, "instance" signifie simplement :
+//
+// un test automatique complet.
+//
+// Exemple :
+//
+// Instance 1 = test de 100 commandes
+// Instance 2 = test de 500 commandes
+//
+void sauvegarderInstance(
+        const vector<EntreeHistorique>& historique,
+        int debut,
+        string nomFichier)
+{
+    // Ouvre le fichier.
+    ofstream fichier(nomFichier);
+
+
+    // Vérifie l'ouverture.
+    if(!fichier)
+    {
+        cerr << "Erreur : impossible d'ouvrir "
+             << nomFichier
+             << endl;
+
+        return;
+    }
+
+
+    int numero = 1;
+
+
+    // Écrit toutes les commandes
+    // depuis le début de cette instance.
+    //
+    for(int i = debut; i < historique.size(); i++)
+    {
+        fichier << numero << "\t"
+                << historique[i].commande << "\t"
+                << historique[i].pid
+                << endl;
+
+
+        numero++;
+    }
+}
+
+
+// ==========================================================
+// MODE AUTOMATIQUE
+// ==========================================================
+
+void lancerAutomatique(
+        int nombreCommandes,
+        int intervalleHistorique,
+        int numeroInstance,
+        vector<EntreeHistorique>& historique,
+        const vector<string>& commandesPossibles)
+{
+    // ------------------------------------------------------
+    // DÉBUT DE L'INSTANCE
+    // ------------------------------------------------------
+
+    // Sauvegarde la position actuelle
+    // de l'historique.
+    //
+    // Comme ça, on sait où commencent
+    // les commandes de cette instance.
+    //
+    int debutInstance = historique.size();
+
+
+    // Démarre le chronomètre.
+    auto debutTemps = chrono::steady_clock::now();
+
+
+    // ------------------------------------------------------
+    // BOUCLE AUTOMATIQUE
+    // ------------------------------------------------------
+
+    for(int i = 1; i <= nombreCommandes; i++)
+    {
+        // --------------------------------------------------
+        // CHOISIR UNE COMMANDE
+        // --------------------------------------------------
+
+        // On parcourt le vector dans l'ordre.
+        //
+        // Quand on arrive à la fin,
+        // on recommence au début.
+        //
+        // Exemple avec 6 commandes :
+        //
+        // i = 1 → position 0
+        // i = 2 → position 1
+        // ...
+        // i = 6 → position 5
+        // i = 7 → position 0
+        //
+        int position =
+                (i - 1) % commandesPossibles.size();
+
+
+        // Récupère la commande correspondante.
+        string commande =
+                commandesPossibles[position];
+
+
+        // Affiche la commande exécutée.
+        cout << "Commande automatique "
+             << i
+             << " : "
+             << commande
+             << endl;
+
+
+        // Exécute la commande avec la même fonction
+        // que pour les commandes manuelles.
+        executerCommande(
+            commande,
+            historique
+        );
+
+
+        // --------------------------------------------------
+        // HISTORIQUE AUX INTERVALLES DEMANDÉS
+        // --------------------------------------------------
+
+        // % donne le reste d'une division.
+        //
+        // Exemple :
+        //
+        // 50 % 50 = 0
+        //
+        // donc lorsque le résultat vaut 0,
+        // nous sommes arrivés à un intervalle demandé.
+        //
+        if(i % intervalleHistorique == 0)
+        {
+            // Création du nom du fichier.
+            //
+            // Exemple :
+            //
+            // historique1_50.txt
+            //
+            string nomFichier =
+                    "historique"
+                    + to_string(numeroInstance)
+                    + "_"
+                    + to_string(i)
+                    + ".txt";
+
+
+            // Affiche les 5 dernières commandes
+            // et crée le fichier correspondant.
+            afficherHistorique(
+                historique,
+                nomFichier
+            );
+        }
+    }
+
+
+    // ------------------------------------------------------
+    // FIN DU CHRONOMÈTRE
+    // ------------------------------------------------------
+
+    auto finTemps =
+            chrono::steady_clock::now();
+
+
+    // Calcule le temps écoulé en millisecondes.
+    auto duree =
+            chrono::duration_cast<chrono::milliseconds>(
+                finTemps - debutTemps
+            );
+
+
+    // ------------------------------------------------------
+    // SAUVEGARDER TOUTE L'INSTANCE
+    // ------------------------------------------------------
+
+    // Exemple :
+    //
+    // instance1_100.txt
+    //
+    string nomInstance =
+            "instance"
+            + to_string(numeroInstance)
+            + "_"
+            + to_string(nombreCommandes)
+            + ".txt";
+
+
+    sauvegarderInstance(
+        historique,
+        debutInstance,
+        nomInstance
+    );
+
+
+    // ------------------------------------------------------
+    // AFFICHAGE DES RÉSULTATS
+    // ------------------------------------------------------
+
+    cout << endl;
+
+
+    cout << "Instance "
+         << numeroInstance
+         << " terminee."
+         << endl;
+
+
+    cout << "Nombre de commandes : "
+         << nombreCommandes
+         << endl;
+
+
+    cout << "Temps d'execution : "
+         << duree.count()
+         << " ms"
+         << endl;
+
+
+    cout << endl;
+}
+
+
+// ==========================================================
+// MAIN
+// ==========================================================
+
+int main() {
+    // ------------------------------------------------------
+    // HISTORIQUE
+    // ------------------------------------------------------
+
+    // Contient toutes les commandes exécutées.
+    vector<EntreeHistorique> historique;
+
+
+    // ------------------------------------------------------
+    // COMMANDES POUR LE MODE AUTOMATIQUE
+    // ------------------------------------------------------
+
+    // On garde volontairement une liste simple.
+    //
+    // Le programme les exécutera dans cet ordre,
+    // puis recommencera au début.
+    //
+    const vector<string> commandesPossibles =
+    {
+        "ls",
+        "ls -l",
+        "ls -a",
+        "pwd",
+        "pwd -L",
+        "ps"
+    };
+
+
+    // ======================================================
+    // BOUCLE PRINCIPALE DU TERMINAL
+    // ======================================================
+
+    while (true) {
+        // Affiche l'invite de commande.
+        //
+        // À remplacer par vos deux noms de famille.
+        cout << "VosNoms< ";
+
+
+        // Contient ce que l'utilisateur écrit.
+        string commande;
+
+
+        // Lit toute la ligne.
+        getline(cin, commande);
+
+
+        // --------------------------------------------------
+        // LIGNE VIDE
+        // --------------------------------------------------
+
+        // Si l'utilisateur appuie seulement sur Entrée,
+        // on recommence la boucle.
+        if (commande == "") {
+            continue;
+        }
+
+
+        // --------------------------------------------------
+        // STOP
+        // --------------------------------------------------
+
+        if (commande == "stop") {
+            // Ferme complètement le programme.
+            return 0;
+        }
+
+
+        // --------------------------------------------------
+        // HISTORIQUE
+        // --------------------------------------------------
+
+        else if (commande == "historique") {
+            // Affiche les 5 dernières commandes.
+            //
+            // Le deuxième argument est vide
+            // parce qu'on n'a pas besoin
+            // d'une copie supplémentaire ici.
+            //
+            afficherHistorique(
+                historique,
+                ""
+            );
+        }
+
+
+        // --------------------------------------------------
+        // INSTANCE 1
+        // --------------------------------------------------
+
+        else if (commande == "auto1") {
+            // Test automatique numéro 1 :
+            //
+            // 100 commandes
+            //
+            // historique à :
+            //
+            // 50
+            // 100
+            //
+            lancerAutomatique(
+                100,
+                50,
+                1,
+                historique,
+                commandesPossibles
+            );
+        }
+
+
+        // --------------------------------------------------
+        // INSTANCE 2
+        // --------------------------------------------------
+
+        else if (commande == "auto2") {
+            // Test automatique numéro 2 :
+            //
+            // 500 commandes
+            //
+            // historique à :
+            //
+            // 100
+            // 200
+            // 300
+            // 400
+            // 500
+            //
+            lancerAutomatique(
+                500,
+                100,
+                2,
+                historique,
+                commandesPossibles
+            );
+        }
+
+
+        // --------------------------------------------------
+        // COMMANDE LINUX NORMALE
+        // --------------------------------------------------
+
+        else {
+            // Toutes les autres commandes sont
+            // envoyées à executerCommande().
+            //
+            executerCommande(
+                commande,
+                historique
+            );
+        }
+    }
+
+
+    return 0;
+}
