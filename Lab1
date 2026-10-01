@@ -1,0 +1,97 @@
+/*
+ * 8INF342 - Systèmes d'exploitation - Laboratoire #1, Partie V
+ * Mini-terminal en C++ et mode automatique (bonification).
+ * Commandes internes :
+ *   historique              -> affiche les 5 dernières commandes + écrit historique.txt
+ *   stop (ou exit)          -> ferme le terminal
+ *   auto <nb> <inter> <i>   -> (bonification) lance <nb> commandes aléatoires,
+ *                              "historique" toutes les <inter> commandes, instance <i>
+ */
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <unistd.h>     
+#include <string.h>     
+#include <sys/wait.h>   
+#include <fstream>      
+#include <deque>        
+#include <cstdlib>      
+#include <ctime>        
+#include <chrono>       
+#include <limits>       
+
+using namespace std;
+
+// Une entrée de l'historique : la commande telle qu'entrée + le pid de l'enfant qui l'a exécutée
+struct EntreeHistorique
+{
+    string commande;
+    pid_t pid;         
+};
+
+// Affiche les 5 dernières commandes et les écrire dans historique.txt (colonnes séparées par \t).
+// Si nomCopie n'est pas vide, le même contenu est aussi écrit dans ce fichier (mode auto).
+void afficherHistorique(const vector<EntreeHistorique>& historique, const string& nomCopie)
+{
+    ofstream fichier("historique.txt");                 // écrase le fichier à chaque appel
+    ofstream copie;
+    if(!nomCopie.empty())                                 // Si il n'est pas vide, l' ouvrir
+        copie.open(nomCopie);
+
+    if(!fichier)
+        cerr << "Erreur : impossible d'ouvrir historique.txt" << endl;
+
+    size_t nb = historique.size() < 5 ? historique.size() : 5;   // au plus 5 commandes
+    for(size_t i = 0; i < nb; i++)
+    {
+        const EntreeHistorique& e = historique[historique.size() - nb + i];
+        size_t numero = nb - i;                         // la plus ancienne = 5, la plus récente = 1
+        string ligne = to_string(numero) + "\t" + e.commande + "\t"
+                     + (e.pid > 0 ? to_string(e.pid) : "-");
+        cout << ligne << endl;                          // affichage de la ligne dans le terminal
+        if(fichier) fichier << ligne << endl;           // sauvegarde dans historique.txt
+        if(copie)   copie   << ligne << endl;           // copie historique<inst> <n>.txt
+    }
+}
+
+// (Bonification) Écrit toutes les commandes d'une instance dans un fichier.
+// 
+void sauvegarderInstance(const vector<EntreeHistorique>& historique, size_t debut, const string& nomFichier)
+{
+    ofstream fichier(nomFichier);
+    if(!fichier)
+    {
+        cerr << "Erreur : impossible d'ouvrir " << nomFichier << endl;
+        return;
+    }
+    for(size_t i = debut; i < historique.size(); i++)
+    {
+        fichier << (i - debut + 1) << "\t" << historique[i].commande << "\t"
+                << (historique[i].pid > 0 ? to_string(historique[i].pid) : "-") << endl;
+    }
+}
+
+int main()
+{
+    vector<EntreeHistorique> historique;    // toutes les commandes exécutées
+
+    // ----- Variables de la bonification (mode auto) -----
+    deque<string> fileAuto;                 // commandes à exécuter automatiquement
+    int instanceAuto = 0;                   // 0 = pas de mode auto en cours
+    size_t debutAuto = 0;                   // indice du 1er élément de l'instance dans historique
+    chrono::steady_clock::time_point debutChrono;
+    srand(time(NULL));
+
+    // Commandes du Tableau 2 avec différentes options (non interactives pour le mode auto)
+    const vector<string> commandesPossibles = {
+        "ls", "ls -l", "ls -a", "ls -la", "ls -R",
+        "pwd", "pwd -L",
+        "man -f ls", "man -f pwd", "man -f cat",
+        "mkdir -p dossierAuto", "mkdir -v dossierAuto2",
+        "rmdir dossierAuto", "rmdir -v dossierAuto2",
+        "mv -f dossierAuto dossierAuto2",
+        "cat historique.txt", "cat -n historique.txt"
+    };
+
+    
