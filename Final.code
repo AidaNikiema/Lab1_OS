@@ -670,13 +670,7 @@ int main() {
         "ls -a",
         "pwd",
         "pwd -L",
-        "ps"
         "pwd -P",
-        "cat historique.txt",
-        "cat -n historique.txt",
-        "man -f ls",
-        "mkdir -p dossierAuto",
-        "rmdir dossierAuto"
     };
 
 
