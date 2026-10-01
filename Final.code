@@ -671,6 +671,12 @@ int main() {
         "pwd",
         "pwd -L",
         "ps"
+        "pwd -P",
+        "cat historique.txt",
+        "cat -n historique.txt",
+        "man -f ls",
+        "mkdir -p dossierAuto",
+        "rmdir dossierAuto"
     };
 
 
@@ -682,7 +688,7 @@ int main() {
         // Affiche l'invite de commande.
         //
         // À remplacer par vos deux noms de famille.
-        cout << "VosNoms< ";
+        cout << "Nikiema-Shamsadini< ";
 
 
         // Contient ce que l'utilisateur écrit.
