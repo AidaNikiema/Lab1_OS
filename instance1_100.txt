@@ -1,0 +1,100 @@
+1	ls	3437
+2	ls -l	3438
+3	ls -a	3439
+4	pspwd	3440
+5	pwd -L	3441
+6	pwd -P	3442
+7	ls	3443
+8	ls -l	3444
+9	ls -a	3445
+10	pspwd	3446
+11	pwd -L	3447
+12	pwd -P	3448
+13	ls	3449
+14	ls -l	3450
+15	ls -a	3451
+16	pspwd	3452
+17	pwd -L	3453
+18	pwd -P	3454
+19	ls	3455
+20	ls -l	3456
+21	ls -a	3457
+22	pspwd	3458
+23	pwd -L	3459
+24	pwd -P	3460
+25	ls	3461
+26	ls -l	3462
+27	ls -a	3463
+28	pspwd	3464
+29	pwd -L	3465
+30	pwd -P	3466
+31	ls	3467
+32	ls -l	3468
+33	ls -a	3469
+34	pspwd	3470
+35	pwd -L	3471
+36	pwd -P	3472
+37	ls	3473
+38	ls -l	3474
+39	ls -a	3475
+40	pspwd	3476
+41	pwd -L	3477
+42	pwd -P	3478
+43	ls	3479
+44	ls -l	3480
+45	ls -a	3481
+46	pspwd	3482
+47	pwd -L	3483
+48	pwd -P	3484
+49	ls	3485
+50	ls -l	3486
+51	ls -a	3487
+52	pspwd	3488
+53	pwd -L	3489
+54	pwd -P	3491
+55	ls	3493
+56	ls -l	3494
+57	ls -a	3496
+58	pspwd	3497
+59	pwd -L	3498
+60	pwd -P	3499
+61	ls	3500
+62	ls -l	3501
+63	ls -a	3504
+64	pspwd	3506
+65	pwd -L	3507
+66	pwd -P	3508
+67	ls	3509
+68	ls -l	3511
+69	ls -a	3512
+70	pspwd	3513
+71	pwd -L	3514
+72	pwd -P	3515
+73	ls	3516
+74	ls -l	3517
+75	ls -a	3518
+76	pspwd	3519
+77	pwd -L	3520
+78	pwd -P	3521
+79	ls	3522
+80	ls -l	3523
+81	ls -a	3524
+82	pspwd	3525
+83	pwd -L	3526
+84	pwd -P	3527
+85	ls	3529
+86	ls -l	3530
+87	ls -a	3532
+88	pspwd	3533
+89	pwd -L	3535
+90	pwd -P	3537
+91	ls	3539
+92	ls -l	3540
+93	ls -a	3542
+94	pspwd	3543
+95	pwd -L	3544
+96	pwd -P	3546
+97	ls	3547
+98	ls -l	3548
+99	ls -a	3549
+100	pspwd	3550
