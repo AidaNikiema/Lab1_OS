@@ -691,7 +691,11 @@ int main() {
 
 
         // Lit toute la ligne.
-        getline(cin, commande);
+       if (!getline(cin, commande))
+{
+    cout << endl;
+    break;
+}
 
 
         // --------------------------------------------------
